@@ -1,0 +1,6 @@
+---
+# Shared variables for all managed hosts
+timezone: Asia/Baku
+
+# APT cache validity in seconds
+apt_cache_valid_time: 3600

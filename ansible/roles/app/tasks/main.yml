@@ -1,0 +1,61 @@
+---
+- name: Create application directory
+  ansible.builtin.file:
+    path: /opt/sentinel-app
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy application source template
+  ansible.builtin.template:
+    src: app.py.j2
+    dest: /opt/sentinel-app/app.py
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: app_source_result
+
+- name: Deploy Dockerfile template
+  ansible.builtin.template:
+    src: Dockerfile.j2
+    dest: /opt/sentinel-app/Dockerfile
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: app_dockerfile_result
+
+- name: Inspect application image
+  community.docker.docker_image_info:
+    name: "{{ app_name }}:{{ app_version }}"
+  become: true
+  register: app_image_info
+
+- name: Build application image
+  community.docker.docker_image:
+    name: "{{ app_name }}"
+    tag: "{{ app_version }}"
+    source: build
+    build:
+      path: /opt/sentinel-app
+  become: true
+  when:
+    - not ansible_check_mode
+    - >
+      app_source_result.changed or
+      app_dockerfile_result.changed or
+      (app_image_info.images | length == 0)
+
+- name: Run application container
+  community.docker.docker_container:
+    name: "{{ app_container_name }}"
+    image: "{{ app_name }}:{{ app_version }}"
+    state: started
+    restart_policy: unless-stopped
+    published_ports:
+      - "{{ app_host_port }}:{{ app_container_port }}"
+    pull: false
+  become: true

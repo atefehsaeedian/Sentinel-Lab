@@ -1,0 +1,35 @@
+---
+- name: Update APT package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: "{{ apt_cache_valid_time }}"
+  become: true
+
+- name: Upgrade installed packages
+  ansible.builtin.apt:
+    upgrade: safe
+  become: true
+
+- name: Configure system timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+  become: true
+
+- name: Create restricted application group
+  ansible.builtin.group:
+    name: "{{ base_app_system_group }}"
+    system: true
+    state: present
+  become: true
+
+- name: Create restricted application user
+  ansible.builtin.user:
+    name: "{{ base_app_system_user }}"
+    group: "{{ base_app_system_group }}"
+    home: "{{ base_app_system_home }}"
+    create_home: true
+    system: true
+    shell: /usr/sbin/nologin
+    password_lock: true
+    state: present
+  become: true

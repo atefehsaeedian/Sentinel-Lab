@@ -1,0 +1,7 @@
+---
+- name: Restart Zabbix Agent 2
+  ansible.builtin.systemd:
+    name: zabbix-agent2
+    state: restarted
+  become: true
+  when: zabbix_agent_server_address | length > 0

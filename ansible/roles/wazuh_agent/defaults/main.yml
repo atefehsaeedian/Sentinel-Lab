@@ -1,0 +1,5 @@
+---
+# Wazuh Agent configuration
+wazuh_agent_repository_url: https://packages.wazuh.com/4.x/apt
+wazuh_agent_manager_address: ""
+wazuh_agent_service_name: wazuh-agent

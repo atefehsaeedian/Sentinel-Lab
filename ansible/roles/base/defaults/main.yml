@@ -1,0 +1,5 @@
+---
+# Restricted account for application process
+base_app_system_user: sentinel
+base_app_system_group: sentinel
+base_app_system_home: /opt/sentinel

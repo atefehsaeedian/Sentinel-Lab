@@ -1,0 +1,4 @@
+---
+zabbix_agent_release: "7.0"
+zabbix_agent_server_address: ""
+zabbix_agent_listen_port: 10050

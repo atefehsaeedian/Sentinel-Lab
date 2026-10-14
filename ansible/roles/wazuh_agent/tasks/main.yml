@@ -1,0 +1,66 @@
+---
+- name: Install Wazuh repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+    state: present
+    update_cache: true
+  become: true
+
+- name: Create APT keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Download Wazuh repository signing key
+  ansible.builtin.get_url:
+    url: https://packages.wazuh.com/key/GPG-KEY-WAZUH
+    dest: /etc/apt/keyrings/wazuh.asc
+    mode: "0644"
+  become: true
+  register: wazuh_agent_key_result
+
+- name: Configure official Wazuh repository
+  ansible.builtin.deb822_repository:
+    name: wazuh
+    types:
+      - deb
+    uris:
+      - "{{ wazuh_agent_repository_url }}"
+    suites:
+      - stable
+    components:
+      - main
+    architectures:
+      - amd64
+    signed_by: /etc/apt/keyrings/wazuh.asc
+    state: present
+  become: true
+  register: wazuh_agent_repo_result
+
+- name: Refresh APT cache after Wazuh repository changes
+  ansible.builtin.apt:
+    update_cache: true
+  become: true
+  when: >
+    wazuh_agent_key_result.changed or
+    wazuh_agent_repo_result.changed
+
+- name: Install Wazuh Agent
+  ansible.builtin.apt:
+    name: wazuh-agent
+    state: present
+  become: true
+
+- name: Stop and disable Wazuh Agent until Manager is configured
+  ansible.builtin.systemd:
+    name: "{{ wazuh_agent_service_name }}"
+    state: stopped
+    enabled: false
+  become: true
+  when: wazuh_agent_manager_address | length == 0

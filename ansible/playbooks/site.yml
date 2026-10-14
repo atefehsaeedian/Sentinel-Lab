@@ -1,0 +1,13 @@
+---
+- name: Configure Sentinel Lab infrastructure
+  hosts: targets
+  gather_facts: true
+  become: false
+
+  roles:
+    - base
+    - docker
+    - app
+    - exporters
+    - zabbix_agent
+    - wazuh_agent

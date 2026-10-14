@@ -1,0 +1,85 @@
+---
+- name: Install Zabbix repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+    state: present
+    update_cache: true
+  become: true
+
+- name: Create APT keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Download official Zabbix signing key
+  ansible.builtin.get_url:
+    url: https://repo.zabbix.com/zabbix-official-repo.key
+    dest: /etc/apt/keyrings/zabbix.asc
+    mode: "0644"
+  become: true
+  register: zabbix_agent_key_result
+
+- name: Configure official Zabbix repository
+  ansible.builtin.deb822_repository:
+    name: zabbix
+    types:
+      - deb
+    uris:
+      - "https://repo.zabbix.com/zabbix/{{ zabbix_agent_release }}/ubuntu"
+    suites:
+      - jammy
+    components:
+      - main
+    architectures:
+      - amd64
+    signed_by: /etc/apt/keyrings/zabbix.asc
+    state: present
+  become: true
+  register: zabbix_agent_repo_result
+
+- name: Refresh APT cache after repository changes
+  ansible.builtin.apt:
+    update_cache: true
+  become: true
+  when: >
+    zabbix_agent_key_result.changed or
+    zabbix_agent_repo_result.changed
+
+- name: Install Zabbix Agent 2
+  ansible.builtin.apt:
+    name: zabbix-agent2
+    state: present
+  become: true
+
+- name: Configure Zabbix Agent 2
+  ansible.builtin.template:
+    src: zabbix_agent2.conf.j2
+    dest: /etc/zabbix/zabbix_agent2.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  notify: Restart Zabbix Agent 2
+
+- name: Stop and disable Zabbix Agent 2 when server is not configured
+  ansible.builtin.systemd:
+    name: zabbix-agent2
+    state: stopped
+    enabled: false
+  become: true
+  when: zabbix_agent_server_address | length == 0
+
+- name: Enable and start Zabbix Agent 2 when server is configured
+  ansible.builtin.systemd:
+    name: zabbix-agent2
+    enabled: true
+    state: started
+  become: true
+  when: zabbix_agent_server_address | length > 0

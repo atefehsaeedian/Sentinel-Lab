@@ -1,0 +1,12 @@
+---
+exporters_node_exporter_version: "1.9.1"
+exporters_node_exporter_arch: amd64
+exporters_node_exporter_port: 9100
+exporters_node_exporter_user: node_exporter
+exporters_node_exporter_group: node_exporter
+exporters_node_exporter_install_dir: /usr/local/bin
+exporters_node_exporter_download_dir: /tmp
+exporters_node_exporter_sha256: "becb950ee80daa8ae7331d77966d94a611af79ad0d3307380907e0ec08f5b4e8"
+exporters_node_exporter_archive_name: "node_exporter-{{ exporters_node_exporter_version }}.linux-{{ exporters_node_exporter_arch }}.tar.gz"
+exporters_node_exporter_extract_dir: >-
+  {{ exporters_node_exporter_download_dir }}/node_exporter-{{ exporters_node_exporter_version }}.linux-{{ exporters_node_exporter_arch }}

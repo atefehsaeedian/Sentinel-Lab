@@ -1,0 +1,46 @@
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+*.tfvars
+!*.tfvars.example
+*.pem
+*.key
+vault-password.txt
+.vault-password
+
+# Terraform generated files and state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Ansible
+.ansible/
+*.retry
+
+# macOS
+.DS_Store
+
+# Generated files
+*.iso
+provider-schema.json
+*.save
+
+# Local Ansible inventory
+ansible/inventory/hosts.yml
+
+# Legacy task directories
+terraform-task01/
+ansible-task02/
