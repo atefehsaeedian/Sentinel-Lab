@@ -153,4 +153,3 @@ Sentinel-Lab/
 ## Scope and Limitations
 
 This configuration provides metrics collection, HTTP health probing, and Prometheus alert evaluation. Alertmanager notification delivery (such as Telegram or webhook notifications) is not configured in this stack.
-
