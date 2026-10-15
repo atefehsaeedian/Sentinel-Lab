@@ -1,145 +1,184 @@
-# Sentinel Lab — Prometheus Monitoring and Alerting
+# Sentinel Lab — Infrastructure Monitoring
 
 ## Overview
 
-This project provides lightweight monitoring for the Sentinel Lab using Prometheus, Node Exporter, and Blackbox Exporter. It collects Linux host metrics, probes the application's HTTP health endpoint, and evaluates alert rules.
+Sentinel Lab is a hands-on infrastructure monitoring project designed to provide visibility into application health, host resources, network activity, and service availability.
+
+The project uses Prometheus to collect and evaluate metrics, Node Exporter to expose host-level metrics, Blackbox Exporter to probe application endpoints, and Grafana to visualize monitoring data through a centralized NOC dashboard.
+
+The environment is designed to support future extensions, including alerting, security monitoring, infrastructure automation, and automated remediation.
 
 ## Architecture
 
-- **Prometheus:** Scrapes metrics, evaluates alert rules, and stores time-series data.
-- **Node Exporter:** Exposes Linux host CPU, memory, filesystem, and network metrics.
-- **Blackbox Exporter:** Probes the application's HTTP health endpoint.
-- **Application:** Exposes `http://127.0.0.1:8080/health` on the Ubuntu VM.
+### Monitoring Components
 
-## Ports
+- **Prometheus:** Collects and stores time-series metrics and evaluates alerting rules.
+- **Node Exporter:** Exposes host-level metrics, including CPU, memory, disk, and network statistics.
+- **Blackbox Exporter:** Performs HTTP probes to monitor endpoint availability and response behavior.
+- **Grafana:** Visualizes monitoring data through dashboards for infrastructure and application health.
+- **Application:** A containerized service monitored through its HTTP health endpoint.
 
-| Service | Port | Purpose |
+### Ports
+
+| Component | Port | Purpose |
 |---|---:|---|
-| Prometheus | 9090 | Queries, targets, and alerts |
-| Blackbox Exporter | 9115 | HTTP probing |
-| Node Exporter | 9100 | Linux host metrics |
-| Application | 8080 | Health endpoint |
+| Application | 8080 | Application HTTP endpoint |
+| Prometheus | 9090 | Metrics, queries, and targets |
+| Node Exporter | 9100 | Host metrics |
+| Blackbox Exporter | 9115 | HTTP probing metrics |
+| Grafana | 3000 | Monitoring dashboards |
 
-## Prerequisites
+Ports are exposed within the lab environment according to the configured Docker and networking setup.
 
-- Ubuntu Linux VM with Docker Engine and Docker Compose
-- Application container named `sentinel-app`, exposing host port `8080`
-- Node Exporter reachable on host port `9100`
-- Repository configuration files in their documented layout
+## Prometheus Configuration
 
-The Compose configuration uses Docker's `host-gateway` mapping to let the exporters reach services on the host.
+Prometheus is configured to collect metrics from the following targets:
 
-## Configuration
+- Application health endpoint through Blackbox Exporter probing.
+- Blackbox Exporter metrics.
+- Node Exporter host metrics.
+- Prometheus self-monitoring endpoint.
 
-- Scrape interval: `15s`
-- Rule evaluation interval: `15s`
-- Data retention: `48h`
-- Persistent named volume: `prometheus-data`
-- Configuration files are mounted read-only.
-- Monitoring containers use `restart: unless-stopped`.
+The Prometheus configuration and alert rules are maintained as files in the repository.
 
-## Deployment
+### Data Retention
 
-For a fresh deployment, clone this repository on the Ubuntu VM and run the commands from the repository root:
+Prometheus is configured to retain metrics for 48 hours.
 
-```bash
-git clone https://github.com/atefehsaeedian/Sentinel-Lab.git
-cd Sentinel-Lab
-sudo docker compose -f compose/compose.yaml config -q
-sudo docker compose -f compose/compose.yaml up -d
-sudo docker compose -f compose/compose.yaml ps
-```
+### Useful PromQL Queries
 
-Do not start a second copy of this stack while containers with the same configured names are already running. The existing lab deployment is managed separately from the repository checkout.
-
-Check Prometheus targets:
-
-```bash
-curl -s http://127.0.0.1:9090/api/v1/targets
-```
-
-Open the Prometheus interface at `http://127.0.0.1:9090`.
-
-## Example PromQL Queries
-
-### Target availability
+**Target availability**
 
 ```promql
 up
 ```
 
-### Available memory in bytes
+**Application HTTP probe status**
 
 ```promql
-node_memory_MemAvailable_bytes
+probe_success
 ```
 
-### CPU usage percentage
+**CPU usage percentage**
 
 ```promql
-100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])))
+100 * (1 - avg by (instance) (
+  rate(node_cpu_seconds_total{mode="idle"}[5m])
+))
 ```
 
-### Available root filesystem percentage
+**Memory usage percentage**
 
 ```promql
-100 * node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+100 * (1 -
+  node_memory_MemAvailable_bytes /
+  node_memory_MemTotal_bytes
+)
 ```
 
-### Application health probe
+**Root filesystem available space in bytes**
 
 ```promql
-probe_success{job="app-health"}
+node_filesystem_avail_bytes{mountpoint="/", fstype!=""}
 ```
 
-A value of `1` indicates success; `0` indicates failure.
+**Network receive rate**
 
-## Alert Rules
-
-Rules are defined in `prometheus/alert-rules.yml`.
-
-| Alert | Condition | Pending duration |
-|---|---|---|
-| `InstanceDown` | A scrape target is down | 1 minute |
-| `HighCPUUsage` | CPU usage exceeds 80% | 5 minutes |
-| `LowDiskSpace` | Available root filesystem space is below 15% | 2 minutes |
-| `HttpHealthFailed` | The application HTTP probe fails | 1 minute |
-
-## Test the HTTP Health Alert
-
-**Warning:** This test briefly interrupts the test application.
-
-Stop the application:
-
-```bash
-sudo docker stop sentinel-app
+```promql
+rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[5m])
 ```
 
-Wait at least 75 seconds and inspect alerts:
+**Network transmit rate**
 
-```bash
-curl -s http://127.0.0.1:9090/api/v1/alerts
+```promql
+rate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*"}[5m])
 ```
 
-The `HttpHealthFailed` alert should fire if the endpoint remains unavailable long enough.
+## Alerting Rules
 
-Restore the application immediately:
+The repository includes alert rules for monitoring important infrastructure and application conditions:
 
-```bash
-sudo docker start sentinel-app
-curl -i http://127.0.0.1:8080/health
-```
+- Target availability.
+- Application HTTP health.
+- High CPU utilization.
+- Low available memory.
 
-The endpoint should return HTTP `200`. After Prometheus reevaluates the probe, the alert should no longer remain active.
+Alert rules are maintained in `prometheus/alert-rules.yml` and loaded through the Prometheus configuration.
 
-## Persistence and Operations
+Alert delivery through Alertmanager is not currently configured.
 
-- Prometheus data is stored in the `prometheus-data` named volume.
-- The retention period is `48h`.
-- Monitoring containers restart automatically unless explicitly stopped.
-- The application and Node Exporter are managed outside this Compose stack.
+## Grafana NOC Dashboard
 
-## Configuration Layout
+### Dashboard Overview
+
+The **Sentinel NOC Overview** dashboard provides a centralized view of application availability and host resource utilization.
+
+Grafana uses Prometheus as its data source.
+
+The dashboard is available in the repository as an exported JSON file:
+
+`grafana/dashboards/sentinel-noc-overview.json`
+
+### Monitoring Panels
+
+The dashboard includes the following panels:
+
+- **Host Availability:** Displays whether the monitored host is available.
+- **Application HTTP Health:** Shows the application health probe status.
+- **CPU Usage:** Displays host CPU utilization.
+- **Memory Usage:** Displays host memory utilization.
+- **Root Disk Available:** Shows available space on the root filesystem.
+- **Network Receive Rate:** Displays incoming network traffic rate.
+- **Network Transmit Rate:** Displays outgoing network traffic rate.
+- **HTTP Probe History:** Visualizes application probe results over time.
+- **Target Health Table:** Provides a tabular overview of monitoring target status.
+
+The dashboard includes Stat, Time series, and Table visualizations, with appropriate units, descriptions, and thresholds where applicable.
+
+### Dashboard Variables and Time Ranges
+
+An `Instance` variable allows filtering by the monitored instance. The current environment contains one configured Node Exporter instance, so the available choices are `All` and the configured instance.
+
+The dashboard has been tested with both of the following time ranges:
+
+- Last 15 minutes.
+- Last 1 hour.
+
+The dashboard refresh interval is configured to 15 seconds.
+
+Additional instances can be displayed by configuring additional Prometheus targets and ensuring their metrics are available.
+
+## Application Outage and Recovery Validation
+
+The monitoring setup has been tested by stopping and restarting the application container.
+
+### Test Procedure
+
+1. Stop the application container:
+
+   ```bash
+   sudo docker stop sentinel-app
+   ```
+
+2. Allow Prometheus to collect subsequent probe results.
+3. Verify that **Application HTTP Health** changes from `1` to `0`.
+4. Verify that **HTTP Probe History** records the outage.
+5. Verify that **Host Availability** remains `1` while the host continues running.
+6. Restore the application container:
+
+   ```bash
+   sudo docker start sentinel-app
+   ```
+
+7. Verify that application health returns to `1`.
+
+### Validation Result
+
+**Passed.** The dashboard detected the application outage and showed recovery after the application container was restarted.
+
+This test confirms that application availability can be monitored independently of host availability.
+
+## Repository Structure
 
 ```text
 Sentinel-Lab/
@@ -147,12 +186,109 @@ Sentinel-Lab/
 │   └── blackbox.yml
 ├── compose/
 │   └── compose.yaml
+├── grafana/
+│   └── dashboards/
+│       └── sentinel-noc-overview.json
 ├── prometheus/
-│   ├── alert-rules.yml
-│   └── prometheus.yml
+│   ├── prometheus.yml
+│   └── alert-rules.yml
 └── README.md
 ```
 
-## Scope and Limitations
+## Validation
 
-This stack provides host metrics, HTTP probing, and Prometheus alert evaluation. Alertmanager delivery to Telegram or a webhook is not configured. Do not commit credentials, API tokens, or other secrets.
+The Docker Compose configuration can be validated with:
+
+```bash
+docker compose -f compose/compose.yaml config -q
+```
+
+The exported Grafana dashboard JSON can be validated with:
+
+```bash
+python3 -m json.tool grafana/dashboards/sentinel-noc-overview.json >/dev/null
+```
+
+## Current Scope and Future Improvements
+
+The current implementation provides application health monitoring, host metrics, HTTP probing, alert-rule definitions, and a Grafana dashboard.
+
+Potential future improvements include:
+
+- Configuring Alertmanager and notification channels.
+- Adding more monitored hosts and application instances.
+- Extending security monitoring and log collection.
+- Implementing infrastructure automation and auto-remediation.
+- Expanding dashboard coverage as the lab evolves.
+
+## Deployment Topology
+
+Sentinel Lab runs in a local virtualized environment. The macOS host runs VirtualBox and provides access to the Ubuntu virtual machine through SSH port forwarding. Docker containers and monitoring services run inside the Ubuntu VM unless otherwise specified.
+
+### Logical Architecture
+
+```text
+                         macOS Host
+                    (MacBook Pro / VirtualBox)
+                              |
+                    SSH Port Forwarding
+                         Port 2222
+                              |
+                              v
+                     Ubuntu Virtual Machine
+                              |
+                +-------------+-------------+
+                |             |             |
+                v             v             v
+        Application      Prometheus      Grafana
+        Container        Container       Container
+        Port 8000        Port 9090       Port 3000
+                |             ^
+                |             |
+                v             |
+          /health endpoint    |
+                |             |
+                v             |
+        Blackbox Exporter ----+
+             Port 9115
+                              ^
+                              |
+                       Node Exporter
+                         Port 9100
+```
+
+### Service Placement and Connectivity
+
+- **macOS host:** Runs VirtualBox and provides SSH access to the Ubuntu VM through host port `2222`.
+- **Ubuntu VM:** Hosts the application container, Prometheus, Blackbox Exporter, Grafana, and Node Exporter.
+- **Application container:** Listens on container port `8000`, exposed as port `8080` on the Ubuntu VM. Its `/health` endpoint is monitored by Blackbox Exporter.
+- **Prometheus:** Runs on port `9090` and scrapes the configured monitoring targets, including Blackbox Exporter, Node Exporter, and its own metrics endpoint.
+- **Blackbox Exporter:** Runs on port `9115` and performs HTTP probes against the application health endpoint.
+- **Node Exporter:** Runs on the Ubuntu VM and exposes host-level CPU, memory, disk, and network metrics on port `9100`.
+- **Grafana:** Runs on port `3000` and queries Prometheus to display the Sentinel NOC Overview dashboard.
+
+### Access from the macOS Host
+
+The Ubuntu VM is accessed through SSH port forwarding:
+
+```bash
+ssh -p 2222 devops@127.0.0.1
+```
+
+To access Grafana through an SSH tunnel, run the following command in a separate macOS terminal and leave it running:
+
+```bash
+ssh -N -L 3000:127.0.0.1:3000 -p 2222 devops@127.0.0.1
+```
+
+Then open `http://localhost:3000` in a browser on the macOS host.
+
+Prometheus is available through the corresponding local port forwarding or the VM's configured network access.
+
+### Network and Deployment Notes
+
+- Container-to-container communication uses the configured Docker network.
+- Prometheus reaches the application health endpoint and Node Exporter through the configured host-access addresses.
+- The Grafana data source uses `http://host.docker.internal:9090` in the current configuration.
+- Host port mappings and firewall rules determine which services are reachable from outside the VM.
+- This diagram describes the current logical topology; it does not imply that every service port is publicly exposed.
