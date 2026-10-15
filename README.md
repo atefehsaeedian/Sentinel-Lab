@@ -2,50 +2,55 @@
 
 ## Overview
 
-This project implements a lightweight monitoring stack for the Sentinel Lab using Prometheus and Blackbox Exporter. It monitors host-level system metrics and checks the application's HTTP health endpoint.
+This project provides lightweight monitoring for the Sentinel Lab using Prometheus, Node Exporter, and Blackbox Exporter. It collects Linux host metrics, probes the application's HTTP health endpoint, and evaluates alert rules.
 
 ## Architecture
 
-- **Prometheus** collects metrics, evaluates alert rules, and stores time-series data.
-- **Node Exporter** exposes Linux host metrics.
-- **Blackbox Exporter** probes the application's HTTP health endpoint.
-- **Application** exposes its health endpoint at `http://127.0.0.1:8080/health` on the Ubuntu VM.
+- **Prometheus:** Scrapes metrics, evaluates alert rules, and stores time-series data.
+- **Node Exporter:** Exposes Linux host CPU, memory, filesystem, and network metrics.
+- **Blackbox Exporter:** Probes the application's HTTP health endpoint.
+- **Application:** Exposes `http://127.0.0.1:8080/health` on the Ubuntu VM.
 
-### Ports
+## Ports
 
 | Service | Port | Purpose |
 |---|---:|---|
-| Prometheus | 9090 | Metrics, queries, and alerts |
+| Prometheus | 9090 | Queries, targets, and alerts |
 | Blackbox Exporter | 9115 | HTTP probing |
 | Node Exporter | 9100 | Linux host metrics |
-| Application | 8080 | Application health endpoint |
+| Application | 8080 | Health endpoint |
 
 ## Prerequisites
 
 - Ubuntu Linux VM with Docker Engine and Docker Compose
-- A running application container exposing port `8080`
-- Node Exporter running on host port `9100`
-- The repository's `prometheus/`, `blackbox/`, and `compose/` configuration files
+- Application container named `sentinel-app`, exposing host port `8080`
+- Node Exporter reachable on host port `9100`
+- Repository configuration files in their documented layout
 
-The Compose configuration uses `host.docker.internal` with Docker's `host-gateway` mapping to reach services running on the host.
+The Compose configuration uses Docker's `host-gateway` mapping to let the exporters reach services on the host.
 
 ## Configuration
 
-- Prometheus scrape interval: `15s`
+- Scrape interval: `15s`
 - Rule evaluation interval: `15s`
-- Prometheus data retention: `48h`
-- Prometheus data is stored in the named Docker volume `prometheus-data`.
-- Configuration files are mounted read-only into their containers.
+- Data retention: `48h`
+- Persistent named volume: `prometheus-data`
+- Configuration files are mounted read-only.
+- Monitoring containers use `restart: unless-stopped`.
 
-## Start the Monitoring Stack
+## Deployment
 
-Run these commands from the repository root on the Ubuntu VM:
+For a fresh deployment, clone this repository on the Ubuntu VM and run the commands from the repository root:
 
 ```bash
-cd ~/Sentinel-Lab
+git clone https://github.com/atefehsaeedian/Sentinel-Lab.git
+cd Sentinel-Lab
+sudo docker compose -f compose/compose.yaml config -q
 sudo docker compose -f compose/compose.yaml up -d
 sudo docker compose -f compose/compose.yaml ps
 ```
+
+Do not start a second copy of this stack while containers with the same configured names are already running. The existing lab deployment is managed separately from the repository checkout.
 
 Check Prometheus targets:
 
@@ -53,11 +58,9 @@ Check Prometheus targets:
 curl -s http://127.0.0.1:9090/api/v1/targets
 ```
 
-Open the Prometheus web interface at `http://127.0.0.1:9090`.
+Open the Prometheus interface at `http://127.0.0.1:9090`.
 
-## Monitored Metrics
-
-Examples of useful PromQL queries:
+## Example PromQL Queries
 
 ### Target availability
 
@@ -83,28 +86,28 @@ node_memory_MemAvailable_bytes
 100 * node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
 ```
 
-### Application HTTP probe result
+### Application health probe
 
 ```promql
 probe_success{job="app-health"}
 ```
 
-A value of `1` indicates a successful probe; `0` indicates failure.
+A value of `1` indicates success; `0` indicates failure.
 
 ## Alert Rules
 
-The following alert rules are configured in `prometheus/alert-rules.yml`:
+Rules are defined in `prometheus/alert-rules.yml`.
 
 | Alert | Condition | Pending duration |
 |---|---|---|
 | `InstanceDown` | A scrape target is down | 1 minute |
 | `HighCPUUsage` | CPU usage exceeds 80% | 5 minutes |
 | `LowDiskSpace` | Available root filesystem space is below 15% | 2 minutes |
-| `HttpHealthFailed` | Application HTTP probe fails | 1 minute |
+| `HttpHealthFailed` | The application HTTP probe fails | 1 minute |
 
-## Test Application Health Alert
+## Test the HTTP Health Alert
 
-**Warning:** The following test deliberately stops the test application container. Run it only when a brief interruption is acceptable.
+**Warning:** This test briefly interrupts the test application.
 
 Stop the application:
 
@@ -112,29 +115,29 @@ Stop the application:
 sudo docker stop sentinel-app
 ```
 
-Wait at least 75 seconds, then inspect active alerts:
+Wait at least 75 seconds and inspect alerts:
 
 ```bash
 curl -s http://127.0.0.1:9090/api/v1/alerts
 ```
 
-The `HttpHealthFailed` alert should become firing if the endpoint remains unavailable long enough.
+The `HttpHealthFailed` alert should fire if the endpoint remains unavailable long enough.
 
-Restore the application immediately after the test:
+Restore the application immediately:
 
 ```bash
 sudo docker start sentinel-app
 curl -i http://127.0.0.1:8080/health
 ```
 
-The health endpoint should return HTTP `200` when the application is healthy again. After Prometheus reevaluates the probe, the alert should no longer remain active.
+The endpoint should return HTTP `200`. After Prometheus reevaluates the probe, the alert should no longer remain active.
 
-## Persistence and Restart Behavior
+## Persistence and Operations
 
-- The Prometheus time-series database uses the named Docker volume `prometheus-data`.
-- Both monitoring containers use `restart: unless-stopped`.
-- The retention period is configured to `48h`.
-- The application and Node Exporter are prerequisites external to this Compose stack.
+- Prometheus data is stored in the `prometheus-data` named volume.
+- The retention period is `48h`.
+- Monitoring containers restart automatically unless explicitly stopped.
+- The application and Node Exporter are managed outside this Compose stack.
 
 ## Configuration Layout
 
@@ -152,4 +155,4 @@ Sentinel-Lab/
 
 ## Scope and Limitations
 
-This configuration provides metrics collection, HTTP health probing, and Prometheus alert evaluation. Alertmanager notification delivery (such as Telegram or webhook notifications) is not configured in this stack.
+This stack provides host metrics, HTTP probing, and Prometheus alert evaluation. Alertmanager delivery to Telegram or a webhook is not configured. Do not commit credentials, API tokens, or other secrets.
