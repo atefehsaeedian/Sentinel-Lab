@@ -1,0 +1,38 @@
+groups:
+  - name: sentinel-alerts
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A monitored target is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }}."
+
+      - alert: HighCPUUsage
+        expr: 100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage has exceeded 80% for 5 minutes."
+
+      - alert: LowDiskSpace
+        expr: 100 * node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} < 15
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Less than 15% of root filesystem space is available."
+
+      - alert: HttpHealthFailed
+        expr: probe_success{job="app-health"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Application health check failed"
+          description: "The application health endpoint is failing."
